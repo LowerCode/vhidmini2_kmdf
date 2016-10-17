@@ -511,28 +511,18 @@ Return Value:
     size_t                  outputBufferLength;
 
     status = WdfRequestRetrieveOutputMemory(Request, &memory);
-    if( !NT_SUCCESS(status) ) {
-        KdPrint(("WdfRequestRetrieveOutputMemory failed 0x%x\n",status));
-        return status;
-    }
+    ...
 
     WdfMemoryGetBuffer(memory, &outputBufferLength);
     if (outputBufferLength < NumBytesToCopyFrom) {
-        status = STATUS_INVALID_BUFFER_SIZE;
-        KdPrint(("RequestCopyFromBuffer: buffer too small. Size %d, expect %d\n",
-                (int)outputBufferLength, (int)NumBytesToCopyFrom));
-        return status;
+...
     }
 
     status = WdfMemoryCopyFromBuffer(memory,
                                     0,
                                     SourceBuffer,
                                     NumBytesToCopyFrom);
-    if( !NT_SUCCESS(status) ) {
-        KdPrint(("WdfMemoryCopyFromBuffer failed 0x%x\n",status));
-        return status;
-    }
-
+...
     WdfRequestSetInformation(Request, NumBytesToCopyFrom);
     return status;
 }
@@ -545,9 +535,6 @@ ReadReport(
           BOOLEAN*          CompleteRequest
     )
 /*++
-
-Routine Description:
-
     Handles IOCTL_HID_READ_REPORT for the HID collection. Normally the request
     will be forwarded to a manual queue for further process. In that case, the
     caller should not try to complete the request at this time, as the request
@@ -555,19 +542,8 @@ Routine Description:
     However, if for some reason the forwarding fails, the caller still need
     to complete the request with proper error code immediately.
 
-Arguments:
-
-    QueueContext - The object context associated with the queue
-
-    Request - Pointer to  Request Packet.
-
     CompleteRequest - A boolean output value, indicating whether the caller
             should complete the request or not
-
-Return Value:
-
-    NT status code.
-
 --*/
 {
     NTSTATUS                status;
@@ -597,21 +573,7 @@ WriteReport(
     _In_  WDFREQUEST        Request
     )
 /*++
-
-Routine Description:
-
     Handles IOCTL_HID_WRITE_REPORT all the collection.
-
-Arguments:
-
-    QueueContext - The object context associated with the queue
-
-    Request - Pointer to  Request Packet.
-
-Return Value:
-
-    NT status code.
-
 --*/
 
 {
@@ -622,12 +584,10 @@ Return Value:
 
     KdPrint(("WriteReport\n"));
 
-    status = RequestGetHidXferPacket_ToWriteToDevice(
+    status = RequestGetHidXferPacket_ToWriteToDevice( //在util.c中
                             Request,
-                            &packet);
-    if( !NT_SUCCESS(status) ) {
-        return status;
-    }
+                            &packet);//把irp->UserBuffe的内容拷贝到此
+...
 
     if (packet.reportId != CONTROL_COLLECTION_REPORT_ID) {
         //
@@ -651,7 +611,26 @@ Return Value:
     }
 
     outputReport = (PHIDMINI_OUTPUT_REPORT)packet.reportBuffer;
+/*
+// This is used to pass write-report and feature-report information
+// from HIDCLASS to a minidriver.
+typedef struct _HID_XFER_PACKET {
+    PUCHAR  reportBuffer;
+    ULONG   reportBufferLen;
+    UCHAR   reportId;
+} HID_XFER_PACKET, *PHID_XFER_PACKET;
 
+ output to device from system
+
+typedef struct _HIDMINI_OUTPUT_REPORT {
+  
+    UCHAR ReportId;   
+    UCHAR Data; //这儿
+    USHORT Pad1;
+    ULONG Pad2;
+
+} HIDMINI_OUTPUT_REPORT, *PHIDMINI_OUTPUT_REPORT;
+*/
     //
     // Store the device data in device extension.
     //
@@ -671,21 +650,7 @@ GetFeature(
     _In_  WDFREQUEST        Request
     )
 /*++
-
-Routine Description:
-
     Handles IOCTL_HID_GET_FEATURE for all the collection.
-
-Arguments:
-
-    QueueContext - The object context associated with the queue
-
-    Request - Pointer to  Request Packet.
-
-Return Value:
-
-    NT status code.
-
 --*/
 {
     NTSTATUS                status;
@@ -698,10 +663,8 @@ Return Value:
 
     status = RequestGetHidXferPacket_ToReadFromDevice(
                             Request,
-                            &packet);
-    if( !NT_SUCCESS(status) ) {
-        return status;
-    }
+                            &packet);//把irp->UserBuffe的内容拷贝到此
+...
 
     if (packet.reportId != CONTROL_COLLECTION_REPORT_ID) {
         //
@@ -759,23 +722,9 @@ SetFeature(
     _In_  WDFREQUEST        Request
     )
 /*++
-
-Routine Description:
-
     Handles IOCTL_HID_SET_FEATURE for all the collection.
     For control collection (custom defined collection) it handles
     the user-defined control codes for sideband communication
-
-Arguments:
-
-    QueueContext - The object context associated with the queue
-
-    Request - Pointer to Request Packet.
-
-Return Value:
-
-    NT status code.
-
 --*/
 {
     NTSTATUS                status;
@@ -927,21 +876,7 @@ SetOutputReport(
     _In_  WDFREQUEST        Request
     )
 /*++
-
-Routine Description:
-
     Handles IOCTL_HID_SET_OUTPUT_REPORT for all the collection.
-
-Arguments:
-
-    QueueContext - The object context associated with the queue
-
-    Request - Pointer to Request Packet.
-
-Return Value:
-
-    NT status code.
-
 --*/
 {
     NTSTATUS                status;
@@ -999,19 +934,7 @@ GetStringId(
     _Out_ ULONG            *LanguageId
     )
 /*++
-
-Routine Description:
-
     Helper routine to decode IOCTL_HID_GET_INDEXED_STRING and IOCTL_HID_GET_STRING.
-
-Arguments:
-
-    Request - Pointer to Request Packet.
-
-Return Value:
-
-    NT status code.
-
 --*/
 {
     NTSTATUS                status;
@@ -1101,19 +1024,7 @@ GetIndexedString(
     _In_  WDFREQUEST        Request
     )
 /*++
-
-Routine Description:
-
-    Handles IOCTL_HID_GET_INDEXED_STRING
-
-Arguments:
-
-    Request - Pointer to Request Packet.
-
-Return Value:
-
-    NT status code.
-
+   Handles IOCTL_HID_GET_INDEXED_STRING
 --*/
 {
     NTSTATUS                status;
@@ -1145,19 +1056,7 @@ GetString(
     _In_  WDFREQUEST        Request
     )
 /*++
-
-Routine Description:
-
     Handles IOCTL_HID_GET_STRING.
-
-Arguments:
-
-    Request - Pointer to Request Packet.
-
-Return Value:
-
-    NT status code.
-
 --*/
 {
     NTSTATUS                status;
@@ -1278,7 +1177,7 @@ Return Value:
 
     WDF_TIMER_CONFIG_INIT_PERIODIC(
                             &timerConfig,
-                            EvtTimerFunc,
+                            EvtTimerFunc, //在下面
                             timerPeriodInSeconds * 1000);
 
     WDF_OBJECT_ATTRIBUTES_INIT(&timerAttributes);
@@ -1355,19 +1254,7 @@ CheckRegistryForDescriptor(
         WDFDEVICE Device
         )
 /*++
-
-Routine Description:
-
     Read "ReadFromRegistry" key value from device parameters in the registry.
-
-Arguments:
-
-    device - pointer to a device object.
-
-Return Value:
-
-    NT status code.
-
 --*/
 
 {
@@ -1406,20 +1293,8 @@ ReadDescriptorFromRegistry(
         WDFDEVICE Device
         )
 /*++
-
-Routine Description:
-
     Read HID report descriptor from registry
-
-Arguments:
-
-    device - pointer to a device object.
-
-Return Value:
-
-    NT status code.
-
---*/
+*/
 {
     WDFKEY          hKey = NULL;
     NTSTATUS        status;
