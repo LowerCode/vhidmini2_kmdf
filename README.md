@@ -1,6 +1,5 @@
 # vhidmini2_kmdf
 for my personal learning, Code forded from micorosoft wdm samples.
-
 HID Minidriver Sample (UMDF V2)
 ======================================
 The *HID minidriver* sample demonstrates how to write a HID minidriver using User-Mode Driver Framework (UMDF).
