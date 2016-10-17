@@ -38,7 +38,7 @@ HID_REPORT_DESCRIPTOR       G_DefaultReportDescriptor[] = {
 // of report descriptor is currently the size of G_DefaultReportDescriptor.
 //
 
-HID_DESCRIPTOR              G_DefaultHidDescriptor = {
+HID_DESCRIPTOR  G_DefaultHidDescriptor = {
     0x09,   // length of HID descriptor
     0x21,   // descriptor type == HID  0x21
     0x0100, // hid spec release
