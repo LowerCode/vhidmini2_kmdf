@@ -469,10 +469,11 @@ Return Value:
     }
 }
 
+//解决了从buffer拷贝数据到request的缓存的问题，就是从白纸到包装
 NTSTATUS
 RequestCopyFromBuffer(
-    _In_  WDFREQUEST        Request, //目的地
-    _In_  PVOID             SourceBuffer,
+    _In_  WDFREQUEST        Request, //目的地，包装过分
+    _In_  PVOID             SourceBuffer, //源，白纸一张
     _When_(NumBytesToCopyFrom == 0, __drv_reportError(NumBytesToCopyFrom cannot be zero))
     _In_  size_t            NumBytesToCopyFrom
     )
@@ -496,14 +497,14 @@ Return Value:
 
     WdfMemoryGetBuffer(memory, &outputBufferLength);
     if (outputBufferLength < NumBytesToCopyFrom) {
-...
+		...
     }
 
     status = WdfMemoryCopyFromBuffer(memory, //DestinationMemory
                                     0, //DestinationOffset
                                     SourceBuffer,
                                     NumBytesToCopyFrom);//输入
-...
+	...
     WdfRequestSetInformation(Request, NumBytesToCopyFrom);
     return status;
 }
@@ -532,7 +533,7 @@ ReadReport(
 
     //
     // forward the request to manual queue
-    //
+    // 图个模拟，转发给手工queue
     status = WdfRequestForwardToIoQueue(
                             Request,
                             QueueContext->DeviceContext->ManualQueue);
@@ -548,6 +549,7 @@ ReadReport(
 }
 
 //把Request->UserBuffe->reportBuffer->Data里1个字节的信息保存在DeviceContext中
+//DeviceContext模拟了应该被写入的物理硬件
 NTSTATUS
 WriteReport(
     _In_  PQUEUE_CONTEXT    QueueContext,
@@ -556,7 +558,6 @@ WriteReport(
 /*++
     Handles IOCTL_HID_WRITE_REPORT all the collection.
 --*/
-
 {
     NTSTATUS                status;
     HID_XFER_PACKET         packet;
@@ -565,16 +566,19 @@ WriteReport(
 
     ...
 
+	//使用下面的函数有一定的方便意义，至少做了一些检查，并且不会影响后面的数据设置
+	//因为真正的数据放在一个指针中，来回拷贝该指针的容器没有关系
     status = RequestGetHidXferPacket_ToWriteToDevice( //在util.c中
                             Request,
                             &packet);//把irp->UserBuffe的内容拷贝到此
-...
+	...
 
+	//下面使用packet的两个字段，用后即弃，这也是使用上面函数的原因
     if (packet.reportId != CONTROL_COLLECTION_REPORT_ID) {
         //
         // Return error for unknown collection
         //
-...
+	...
     }
 
     //
@@ -586,6 +590,7 @@ WriteReport(
         ...
     }
 
+	//虽然通过拷贝，但是下面取回来的地址却始终未变，因为packet.reportBuffer是个指针
     outputReport = (PHIDMINI_OUTPUT_REPORT)packet.reportBuffer;
 /*
 // This is used to pass write-report and feature-report information
@@ -607,7 +612,7 @@ typedef struct _HIDMINI_OUTPUT_REPORT {
     //
     // Store the device data in device extension.
     //
-    QueueContext->DeviceContext->DeviceData = outputReport->Data;
+    QueueContext->DeviceContext->DeviceData = outputReport->Data;//设置值，这是个value
 
     //
     // set status and information
@@ -624,7 +629,7 @@ typedef struct _HIDMINI_OUTPUT_REPORT {
 HRESULT
 GetFeature(
     _In_  PQUEUE_CONTEXT    QueueContext,
-    _In_  WDFREQUEST        Request
+    _In_  WDFREQUEST        Request //=?
     )
 /*++
     Handles IOCTL_HID_GET_FEATURE for all the collection.
@@ -634,21 +639,22 @@ GetFeature(
     HID_XFER_PACKET         packet;
     ULONG                   reportSize;
     PMY_DEVICE_ATTRIBUTES   myAttributes;
-    PHID_DEVICE_ATTRIBUTES  hidAttributes = &QueueContext->DeviceContext->HidDeviceAttributes;
+    PHID_DEVICE_ATTRIBUTES  hidAttributes = &QueueContext->DeviceContext->HidDeviceAttributes;//源，模拟存储在硬件里
 
     KdPrint(("GetFeature\n"));
 
+	//下面帮助函数的好处是：使得我们操作packet就等于操作request的input buffer
     status = RequestGetHidXferPacket_ToReadFromDevice(
                             Request,
                             &packet);//把irp->UserBuffe的内容拷贝到此
-...
-
+	...
+	//下面使用packet的两个字段，用后即弃，这也是使用上面函数的原因
     if (packet.reportId != CONTROL_COLLECTION_REPORT_ID) {
         //
         // If collection ID is not for control collection then handle
         // this request just as you would for a regular collection.
         //
-...
+	...
     }
 
     //
@@ -665,7 +671,7 @@ GetFeature(
 
     reportSize = sizeof(MY_DEVICE_ATTRIBUTES) + sizeof(packet.reportId);//report大小始终包括ID字段
     if (packet.reportBufferLen < reportSize) {
-...
+	...
     }
 
     //
@@ -677,16 +683,15 @@ GetFeature(
     // something to keep in mind.
 	
     // 在report->Data处开始当成myAttributes，跳过开始的ProductID字段
-	// packet虽然是本地变量，但是packet->report所指的内存可能有父亲，往那块内存拷贝三个short值
-    myAttributes = (PMY_DEVICE_ATTRIBUTES)(packet.reportBuffer + sizeof(packet.reportId));
-    myAttributes->ProductID     = hidAttributes->ProductID;
-    myAttributes->VendorID      = hidAttributes->VendorID;
-    myAttributes->VersionNumber = hidAttributes->VersionNumber;
+	myAttributes = (PMY_DEVICE_ATTRIBUTES)(packet.reportBuffer + sizeof(packet.reportId));
+    myAttributes->ProductID     = hidAttributes->ProductID;    //设置三个short
+    myAttributes->VendorID      = hidAttributes->VendorID;     //设置三个short
+    myAttributes->VersionNumber = hidAttributes->VersionNumber;//设置三个short
 
     //
     // Report how many bytes were copied
     //
-    WdfRequestSetInformation(Request, reportSize);
+    WdfRequestSetInformation(Request, reportSize);//不要忘了
     return status;
 }
 
@@ -705,17 +710,15 @@ SetFeature(
     HID_XFER_PACKET         packet;
     ULONG                   reportSize;
     PHIDMINI_CONTROL_INFO   controlInfo;
-    PHID_DEVICE_ATTRIBUTES  hidAttributes = &QueueContext->DeviceContext->HidDeviceAttributes;
-
+    PHID_DEVICE_ATTRIBUTES  hidAttributes = 
+			&QueueContext->DeviceContext->HidDeviceAttributes;//目的地
     ...
 
     status = RequestGetHidXferPacket_ToWriteToDevice(
-                            Request,
-                            &packet);
-    if( !NT_SUCCESS(status) ) {
-        return status;
-    }
-
+										Request, 
+										&packet); //把irp->UserBuffe的内容拷贝到此
+	...
+	//参数检查，和前面的函数一样
     if (packet.reportId != CONTROL_COLLECTION_REPORT_ID) {
         //
         // If collection ID is not for control collection then handle
@@ -733,6 +736,7 @@ SetFeature(
         //...无效缓冲大小
     }
 
+	//真正的地址，real end address
     controlInfo = (PHIDMINI_CONTROL_INFO)packet.reportBuffer;
 
     switch(controlInfo->ControlCode)
@@ -741,11 +745,11 @@ SetFeature(
         //
         // Store the device attributes in device extension
         //
-        hidAttributes->ProductID  = controlInfo->u.Attributes.ProductID;
+        hidAttributes->ProductID  = controlInfo->u.Attributes.ProductID; //设置值1/3
 //      -------------               -----------  
 //      来自设备扩展                来自packet->reportBuffer,一块神秘的地方
-        hidAttributes->VendorID      = controlInfo->u.Attributes.VendorID;
-        hidAttributes->VersionNumber = controlInfo->u.Attributes.VersionNumber;
+        hidAttributes->VendorID      = controlInfo->u.Attributes.VendorID; //设置值2/3
+        hidAttributes->VersionNumber = controlInfo->u.Attributes.VersionNumber; //设置值3/3
 
         //
         // set status and information
@@ -776,7 +780,7 @@ SetFeature(
 NTSTATUS
 GetInputReport(
     _In_  PQUEUE_CONTEXT    QueueContext,
-    _In_  WDFREQUEST        Request
+    _In_  WDFREQUEST        Request //=?
     )
 /*++
 Routine Description:
@@ -798,7 +802,7 @@ Return Value:
     status = RequestGetHidXferPacket_ToReadFromDevice(
                             Request,
                             &packet);
-...
+	...
 
     if (packet.reportId != CONTROL_COLLECTION_REPORT_ID) {
         //
@@ -815,13 +819,13 @@ Return Value:
 
     reportBuffer = (PHIDMINI_INPUT_REPORT)(packet.reportBuffer);
 
-    reportBuffer->ReportId = CONTROL_COLLECTION_REPORT_ID;
-    reportBuffer->Data     = QueueContext->OutputReport;
+    reportBuffer->ReportId = CONTROL_COLLECTION_REPORT_ID; //设置值
+    reportBuffer->Data     = QueueContext->OutputReport; //设置值
 
     //
     // Report how many bytes were copied
     //
-    WdfRequestSetInformation(Request, reportSize);
+    WdfRequestSetInformation(Request, reportSize);//别忘了
     return status;
 }
 
@@ -875,7 +879,7 @@ SetOutputReport(
     return status;
 }
 
-
+//这只是个帮助函数，为下一个函数所用
 NTSTATUS
 GetStringId(
     _In_  WDFREQUEST        Request,
@@ -913,10 +917,12 @@ GetStringId(
     //
 
     WDF_REQUEST_PARAMETERS_INIT(&requestParameters);
-    WdfRequestGetParameters(Request, &requestParameters);
+    WdfRequestGetParameters(Request, &requestParameters); //从request还原称白纸
 
+	//直接获得Type3InputBuffer地址，这有助于解决两个问题
+	//这个地方肯定用得着
     inputValue = PtrToUlong(
-        requestParameters.Parameters.DeviceIoControl.Type3InputBuffer);
+        requestParameters.Parameters.DeviceIoControl.Type3InputBuffer);//string index放在这里
 
     status = STATUS_SUCCESS;
 
@@ -932,10 +938,7 @@ GetStringId(
     //
 
     status = WdfRequestRetrieveInputMemory(Request, &inputMemory);
-    if( !NT_SUCCESS(status) ) {
-        KdPrint(("WdfRequestRetrieveInputMemory failed 0x%x\n",status));
-        return status;
-    }
+...
     inputBuffer = WdfMemoryGetBuffer(inputMemory, &inputBufferLength);
 
     //
@@ -943,10 +946,7 @@ GetStringId(
     //
     if (inputBufferLength < sizeof(ULONG))
     {
-        status = STATUS_INVALID_BUFFER_SIZE;
-        KdPrint(("GetStringId: invalid input buffer. size %d, expect %d\n",
-                            (int)inputBufferLength, (int)sizeof(ULONG)));
-        return status;
+...
     }
 
     inputValue = (*(PULONG)inputBuffer);
@@ -956,13 +956,13 @@ GetStringId(
     //
     // The least significant two bytes of the INT value contain the string id.
     //
-    *StringId = (inputValue & 0x0ffff);
+    *StringId = (inputValue & 0x0ffff);//查资料验证
 
     //
     // The most significant two bytes of the INT value contain the language
     // ID (for example, a value of 1033 indicates English).
     //
-    *LanguageId = (inputValue >> 16);
+    *LanguageId = (inputValue >> 16);//查资料验证
 
     return status;
 }
@@ -970,7 +970,7 @@ GetStringId(
 
 NTSTATUS
 GetIndexedString(
-    _In_  WDFREQUEST        Request
+    _In_  WDFREQUEST   Request
     )
 /*++
    Handles IOCTL_HID_GET_INDEXED_STRING
@@ -983,11 +983,11 @@ GetIndexedString(
 
     // While we don't use the language id, some minidrivers might.
     //
-    UNREFERENCED_PARAMETER(languageId);
+    UNREFERENCED_PARAMETER(languageId);//一般不用
 
     if (NT_SUCCESS(status)) {
 
-        if (stringIndex != VHIDMINI_DEVICE_STRING_INDEX)
+        if (stringIndex != VHIDMINI_DEVICE_STRING_INDEX) //5
         {
             status = STATUS_INVALID_PARAMETER;
             KdPrint(("GetString: unkown string index %d\n", stringIndex));
@@ -1023,7 +1023,7 @@ GetString(
         return status;
     }
 
-    switch (stringId){
+    switch (stringId){ //注意stringid来自于request
     case HID_STRING_ID_IMANUFACTURER:
         stringSizeCb = sizeof(VHIDMINI_MANUFACTURER_STRING);
         string = VHIDMINI_MANUFACTURER_STRING;
@@ -1116,7 +1116,7 @@ Return Value:
                             timerPeriodInSeconds * 1000);
 
     WDF_OBJECT_ATTRIBUTES_INIT(&timerAttributes);
-    timerAttributes.ParentObject = queue;
+    timerAttributes.ParentObject = queue; //将来通过time找queue方便
     status = WdfTimerCreate(&timerConfig,
                             &timerAttributes,
                             &queueContext->Timer);
@@ -1128,14 +1128,17 @@ Return Value:
 
     WdfTimerStart(queueContext->Timer, WDF_REL_TIMEOUT_IN_SEC(1));
 
-    *Queue = queue;
+    *Queue = queue; //保存
 
     return status;
 }
 
+//在这里完成irp
+//模拟读取report，数据不是真的从设备来，而是从设备扩展里来
+//没什么，主要是WdfIoQueueRetrieveNextRequest函数取一个request
 void
 EvtTimerFunc(
-    _In_  WDFTIMER          Timer
+    _In_  WDFTIMER  Timer
     )
 /*++
 Routine Description:
@@ -1151,11 +1154,11 @@ Return Value:
     WDFQUEUE                queue;
     PMANUAL_QUEUE_CONTEXT   queueContext;
     WDFREQUEST              request;
-    HIDMINI_INPUT_REPORT    readReport;
+    HIDMINI_INPUT_REPORT    readReport;//是个结构，不是指针
 
     KdPrint(("EvtTimerFunc\n"));
 
-    queue = (WDFQUEUE)WdfTimerGetParentObject(Timer);
+	queue = (WDFQUEUE)WdfTimerGetParentObject(Timer);//设置time的父亲的必要性
     queueContext = GetManualQueueContext(queue);
 
     //
@@ -1166,15 +1169,20 @@ Return Value:
                             &request);
 
     if (NT_SUCCESS(status)) {
-
+		
         readReport.ReportId = CONTROL_FEATURE_REPORT_ID;
         readReport.Data     = queueContext->DeviceContext->DeviceData;
 
-        status = RequestCopyFromBuffer(request,
+		//这代码运行的多慢啊，先设定本地变量，再拷贝，拷贝函数一共调用了4个函数：
+		//WdfRequestRetrieveOutputMemory
+		//WdfMemoryGetBuffer
+		//WdfMemoryCopyFromBuffer
+		//WdfRequestSetInformation
+        status = RequestCopyFromBuffer(request,//目的地
                             &readReport,
                             sizeof(readReport));
-
-        WdfRequestComplete(request, status);
+		
+        WdfRequestComplete(request, status);//完成irp
     }
 }
 
