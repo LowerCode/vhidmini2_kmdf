@@ -1,2 +1,2 @@
 # vhidmini2_kmdf
-Learning , Just for me 
+for my personal learning, Code forded from micorosoft wdm samples.
