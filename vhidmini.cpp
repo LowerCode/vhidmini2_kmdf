@@ -216,10 +216,11 @@ EVT_WDF_IO_QUEUE_IO_INTERNAL_DEVICE_CONTROL EvtIoDeviceControl;
 EVT_WDF_IO_QUEUE_IO_DEVICE_CONTROL          EvtIoDeviceControl;
 #endif
 
+//没什么，就是设置处理queue 的方法， 再创建queue而已
 NTSTATUS
 QueueCreate(
     _In_  WDFDEVICE         Device,
-    _Out_ WDFQUEUE          *Queue //uuiu 
+    _Out_ WDFQUEUE          *Queue /输出
     )
 /*++
 Routine Description:
@@ -247,7 +248,7 @@ Return Value:
 
     WDF_IO_QUEUE_CONFIG_INIT_DEFAULT_QUEUE(
                             &queueConfig,
-                            WdfIoQueueDispatchParallel);
+                            WdfIoQueueDispatchParallel/*枚举*/);
 
 #ifdef _KERNEL_MODE
     queueConfig.EvtIoInternalDeviceControl  = EvtIoDeviceControl;
@@ -268,13 +269,10 @@ Return Value:
                             Device,
                             &queueConfig,
                             &queueAttributes,
-                            &queue);
+                            &queue);//out
+    ...
 
-    if( !NT_SUCCESS(status) ) {
-        KdPrint(("WdfIoQueueCreate failed 0x%x\n",status));
-        return status;
-    }
-
+    //queue的上下文也要我们设置？
     queueContext = GetQueueContext(queue);
     queueContext->Queue         = queue;
     queueContext->DeviceContext = GetDeviceContext(Device);
