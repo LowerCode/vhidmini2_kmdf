@@ -133,17 +133,17 @@ Return Value:
 
     KdPrint(("Enter EvtDeviceAdd\n"));
 
-	//------------------------------------------------
-	// 第一步：声明一下
-	//------------------------------------------------
+    //------------------------------------------------
+    // 第一步：声明一下
+    //------------------------------------------------
     //
     // Mark ourselves as a filter, which also relinquishes power policy ownership
     // 标记本驱动为filter，同时交出了power policy的所有权
     WdfFdoInitSetFilter(DeviceInit);//identifies the calling driver as an upper-level or lower-level filter driver, for a specified device.
 
-	//------------------------------------------------
-	// 第二步：创建设备对象，wdf牌
-	//------------------------------------------------
+    //------------------------------------------------
+    // 第二步：创建设备对象，wdf牌
+    //------------------------------------------------
     WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(
                             &deviceAttributes,
                             DEVICE_CONTEXT);//用结构来初始化！实际是通过宏实现的
@@ -152,9 +152,9 @@ Return Value:
                             &deviceAttributes,//上面刚刚初始化的，添加了DEVICE_CONTEXT
                             &device);//创建的WDFDEVICE句柄
     ...
-	//------------------------------------------------
-	// 第三步：设置deviceContext，简单的东西
-	//------------------------------------------------
+    //------------------------------------------------
+    // 第三步：设置deviceContext，简单的东西
+    //------------------------------------------------
     deviceContext = GetDeviceContext(device);
     deviceContext->Device       = device;//刚刚创建的
     deviceContext->DeviceData   = 0;
@@ -167,19 +167,19 @@ Return Value:
     hidAttributes->ProductID    = HIDMINI_PID; //硬编码
     hidAttributes->VersionNumber = HIDMINI_VERSION;//硬编码
 
-	//------------------------------------------------
-	// 第三步：设置deviceContext，创建两个queue
-	//------------------------------------------------
-	//下面的函数是自己定义的，在本函数后面
-    status = QueueCreate(device,//刚刚创建的
+    //------------------------------------------------
+    // 第三步：设置deviceContext，创建两个queue
+    //------------------------------------------------
+    
+    status = DefaultQueueCreate(device,//刚刚创建的
                          &deviceContext->DefaultQueue);//把创建的queue1存储在此
     ...
     status = ManualQueueCreate(device,
                                &deviceContext->ManualQueue);//把创建的queue2存储在此
     ...
-	//------------------------------------------------
-	// 第三步：设置deviceContext，这次是HidDescriptor
-	//------------------------------------------------
+    //------------------------------------------------
+    // 第三步：设置deviceContext，这次是HidDescriptor
+    //------------------------------------------------
     //
     // Use default "HID Descriptor" (hardcoded). We will set the
     // wReportLength memeber of HID descriptor when we read the
@@ -188,9 +188,9 @@ Return Value:
     // 继续设置deviceContext，这次是HidDescriptor，这个比较重要
     deviceContext->HidDescriptor = G_DefaultHidDescriptor;//硬编码
 
-	//------------------------------------------------
-	// 第四步：设置deviceContext，这次是ReportDescriptor
-	//------------------------------------------------
+    //------------------------------------------------
+    // 第四步：设置deviceContext，这次是ReportDescriptor
+    //------------------------------------------------
     //
     // Check to see if we need to read the Report Descriptor from
     // registry. If the "ReadFromRegistry" flag in the registry is set
@@ -199,8 +199,7 @@ Return Value:
     // hard-coded default report descriptor.
     //
 
-	//最好从注册表中读取
-    status = CheckRegistryForDescriptor(device);
+    status = CheckRegistryForDescriptor(device);//看看注册表有没有Report Descriptor二进制数据
     if (NT_SUCCESS(status)){
         //
         // We need to read read descriptor from registry
@@ -222,7 +221,7 @@ Return Value:
 }
 
 #ifdef _KERNEL_MODE
-EVT_WDF_IO_QUEUE_IO_INTERNAL_DEVICE_CONTROL EvtIoDeviceControl;
+EVT_WDF_IO_QUEUE_IO_INTERNAL_DEVICE_CONTROL EvtIoDeviceControl;//内核是：INTERAL
 #else
 EVT_WDF_IO_QUEUE_IO_DEVICE_CONTROL          EvtIoDeviceControl;
 #endif
@@ -272,11 +271,11 @@ Return Value:
     status = WdfIoQueueCreate(
                             Device,
                             &queueConfig,
-                            &queueAttributes,
+                            &queueAttributes,//有context
                             &queue);//out
     ...
 
-    //queue的上下文也要我们设置？
+    //queue的上下文也要我们设置
     queueContext = GetQueueContext(queue);
     queueContext->Queue         = queue;
     queueContext->DeviceContext = GetDeviceContext(Device);
@@ -356,8 +355,8 @@ Return Value:
         // Returns a report from the device into a class driver-supplied
         // buffer.
         //
-		//只有这个地方需要函数来确定是否需要完成该IRP
-		//其他地方都要求完成该IRP
+	//只有这个地方需要函数来确定是否需要完成该IRP
+	//其他地方都要求完成该IRP
         status = ReadReport(queueContext, Request, &completeRequest);
         break;
 
@@ -571,18 +570,18 @@ WriteReport(
 
     ...
 
-	//使用下面的函数有一定的方便意义，至少做了一些检查，并且不会影响后面的数据设置
-	//因为真正的数据放在一个指针中，来回拷贝该指针的容器没有关系
+    //使用下面的函数有一定的方便意义，至少做了一些检查，并且不会影响后面的数据设置
+    //因为真正的数据放在一个指针中，来回拷贝该指针的容器没有关系
     status = RequestGetHidXferPacket_ToWriteToDevice( //在util.c中
                             Request,
                             &packet);//把irp->UserBuffe的内容拷贝到此
 	...
 
-	//下面使用packet的两个字段，用后即弃，这也是使用上面函数的原因
+    //下面使用packet的两个字段，用后即弃，这也是使用上面函数的原因
     if (packet.reportId != CONTROL_COLLECTION_REPORT_ID) {
-        //
-        // Return error for unknown collection
-        //
+    //
+    // Return error for unknown collection
+    //
 	...
     }
 
@@ -594,8 +593,7 @@ WriteReport(
     if (packet.reportBufferLen < reportSize) {
         ...
     }
-
-	//虽然通过拷贝，但是下面取回来的地址却始终未变，因为packet.reportBuffer是个指针
+    //虽然通过拷贝，但是下面取回来的地址却始终未变，因为packet.reportBuffer是个指针
     outputReport = (PHIDMINI_OUTPUT_REPORT)packet.reportBuffer;
 /*
 // This is used to pass write-report and feature-report information
@@ -604,10 +602,9 @@ typedef struct _HID_XFER_PACKET {
     PUCHAR  reportBuffer;
     ULONG   reportBufferLen;
     UCHAR   reportId;
-} HID_XFER_PACKET, *PHID_XFER_PACKET;
- output to device from system
+} HID_XFER_PACKET, *PHID_XFER_PACKET; 
+
 typedef struct _HIDMINI_OUTPUT_REPORT {
-  
     UCHAR ReportId;   
     UCHAR Data; //这儿
     USHORT Pad1;
@@ -648,12 +645,12 @@ GetFeature(
 
     KdPrint(("GetFeature\n"));
 
-	//下面帮助函数的好处是：使得我们操作packet就等于操作request的input buffer
+    //下面帮助函数的好处是：使得我们操作packet就等于操作request的input buffer
     status = RequestGetHidXferPacket_ToReadFromDevice(
                             Request,
                             &packet);//把irp->UserBuffe的内容拷贝到此
 	...
-	//下面使用packet的两个字段，用后即弃，这也是使用上面函数的原因
+    //下面使用packet的两个字段，用后即弃，这也是使用上面函数的原因
     if (packet.reportId != CONTROL_COLLECTION_REPORT_ID) {
         //
         // If collection ID is not for control collection then handle
@@ -688,7 +685,7 @@ GetFeature(
     // something to keep in mind.
 	
     // 在report->Data处开始当成myAttributes，跳过开始的ProductID字段
-	myAttributes = (PMY_DEVICE_ATTRIBUTES)(packet.reportBuffer + sizeof(packet.reportId));
+    myAttributes = (PMY_DEVICE_ATTRIBUTES)(packet.reportBuffer + sizeof(packet.reportId));
     myAttributes->ProductID     = hidAttributes->ProductID;    //设置三个short
     myAttributes->VendorID      = hidAttributes->VendorID;     //设置三个short
     myAttributes->VersionNumber = hidAttributes->VersionNumber;//设置三个short
@@ -720,10 +717,10 @@ SetFeature(
     ...
 
     status = RequestGetHidXferPacket_ToWriteToDevice(
-										Request, 
-										&packet); //把irp->UserBuffe的内容拷贝到此
-	...
-	//参数检查，和前面的函数一样
+						Request, 
+						&packet); //把irp->UserBuffe的内容拷贝到此
+    ...
+    //参数检查，和前面的函数一样
     if (packet.reportId != CONTROL_COLLECTION_REPORT_ID) {
         //
         // If collection ID is not for control collection then handle
@@ -741,7 +738,7 @@ SetFeature(
         //...无效缓冲大小
     }
 
-	//真正的地址，real end address
+    //真正的地址，real end address
     controlInfo = (PHIDMINI_CONTROL_INFO)packet.reportBuffer;
 
     switch(controlInfo->ControlCode)
