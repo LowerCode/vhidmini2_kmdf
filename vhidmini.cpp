@@ -228,7 +228,7 @@ EVT_WDF_IO_QUEUE_IO_DEVICE_CONTROL          EvtIoDeviceControl;
 
 //没什么，就是设置处理queue的回调为EvtIoDeviceControl，再创建queue而已
 NTSTATUS
-QueueCreate(
+DefaultQueueCreate(
     _In_  WDFDEVICE         Device,
     _Out_ WDFQUEUE          *Queue /输出
     )
